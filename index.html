@@ -1,0 +1,1225 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>社區尋寶：消失的秘寶 | 信心點數池投屏桌遊</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Vue 3 CDN (改用臺灣學術網路 TANet 與校園連線高相容性的 CDN) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.4.21/vue.global.prod.min.js"></script>
+  <!-- Google Fonts: Chakra Petch & Noto Sans TC -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700;800&family=Noto+Sans+TC:wght@400;600;700;900&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Noto Sans TC', sans-serif;
+      background-color: #080d1a;
+      color: #f1f5f9;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .font-tech {
+      font-family: 'Chakra Petch', sans-serif;
+    }
+    /* 地圖網格紋理背景 */
+    .map-grid-bg {
+      background-color: #080d1a;
+      background-image: 
+        radial-gradient(rgba(59, 130, 246, 0.12) 1px, transparent 1px),
+        radial-gradient(rgba(30, 41, 59, 0.4) 1px, #080d1a 1px);
+      background-size: 32px 32px;
+      background-position: 0 0, 16px 16px;
+    }
+    /* 排除蓋印震撼印章動畫 */
+    @keyframes stampDown {
+      0% { opacity: 0; transform: scale(3.2) rotate(-24deg); }
+      70% { opacity: 1; transform: scale(0.9) rotate(-12deg); }
+      100% { opacity: 1; transform: scale(1) rotate(-12deg); }
+    }
+    .stamp-eliminated {
+      animation: stampDown 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+    /* 真秘寶金色光芒動效 */
+    @keyframes goldenGlow {
+      0%, 100% { box-shadow: 0 0 25px rgba(245, 158, 11, 0.7), inset 0 0 15px rgba(251, 191, 36, 0.5); }
+      50% { box-shadow: 0 0 55px rgba(245, 158, 11, 1), inset 0 0 30px rgba(251, 191, 36, 0.85); }
+    }
+    .winner-pulse {
+      animation: goldenGlow 1.6s infinite ease-in-out;
+    }
+    /* 自訂拉桿樣式 */
+    input[type=range] {
+      -webkit-appearance: none;
+      background: #1e293b;
+      border-radius: 9999px;
+      height: 8px;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 22px;
+      width: 22px;
+      border-radius: 50%;
+      background: #f59e0b;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(245, 158, 11, 0.8);
+      border: 2px solid #ffffff;
+    }
+  </style>
+</head>
+<body class="map-grid-bg min-h-screen flex flex-col justify-between p-2 lg:p-4 selection:bg-amber-500 selection:text-black">
+  <div id="app" class="min-h-screen flex flex-col justify-between max-w-[1780px] mx-auto w-full">
+
+    <!-- 頂部導覽列：回合計數、目前行動隊伍、信心點數提示與控制按鈕 -->
+    <header class="bg-slate-900/90 backdrop-blur border border-slate-700/80 rounded-2xl px-4 py-2.5 shadow-2xl flex flex-wrap items-center justify-between gap-3 mb-2">
+      <div class="flex items-center gap-3">
+        <div class="bg-gradient-to-tr from-amber-600 to-yellow-400 p-2.5 rounded-xl text-slate-950 font-black shadow-lg flex items-center justify-center text-xl">
+          🧭
+        </div>
+        <div>
+          <h1 class="text-lg lg:text-xl font-extrabold tracking-wide bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 bg-clip-text text-transparent flex items-center gap-2">
+            社區尋寶：尋找消失的秘寶
+            <span class="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-tech font-bold">點數自由分配版</span>
+          </h1>
+          <p class="text-xs text-slate-400 hidden sm:block">改編自《Museum Suspects》· 信心點數池經濟與邏輯排除博弈</p>
+        </div>
+      </div>
+
+      <!-- 回合與隊伍狀態指示 -->
+      <div class="flex items-center gap-3 lg:gap-5">
+        <div class="bg-slate-800/90 border border-slate-700 px-3.5 py-1.5 rounded-xl flex items-center gap-2 text-sm shadow">
+          <span class="text-slate-400 font-bold font-tech">ROUND</span>
+          <span class="text-amber-400 font-extrabold text-base font-tech">{{ gameState.isSettlement ? '結算' : `${gameState.currentRound} / 6` }}</span>
+        </div>
+
+        <div v-if="!gameState.isSettlement" class="flex items-center gap-2.5 px-4 py-1.5 rounded-xl border text-sm font-bold shadow-lg transition-all"
+             :style="{ borderColor: currentTeam.color + '99', backgroundColor: currentTeam.color + '20' }">
+          <span class="w-3 h-3 rounded-full animate-ping" :style="{ backgroundColor: currentTeam.color }"></span>
+          <span>輪到行動：</span>
+          <span class="text-base font-black" :style="{ color: currentTeam.color }">{{ currentTeam.name }}</span>
+          <span class="text-xs font-tech px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700 text-amber-300 ml-1">
+            剩餘 {{ currentTeam.energy }} 點
+          </span>
+        </div>
+
+        <div v-else class="flex items-center gap-2 px-4 py-1.5 rounded-xl bg-purple-950/80 border border-purple-500 text-purple-300 text-sm font-bold animate-pulse shadow">
+          <span>📜 真相結算驗證中 (筆記 {{ settlementStep }} / 8)</span>
+        </div>
+      </div>
+
+      <!-- 控制鈕群組 -->
+      <div class="flex items-center gap-2">
+        <!-- 一鍵下載 index.html 檔按鈕 (專供 EZPAGE 布署) -->
+        <button @click="downloadCurrentFile" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow transform active:scale-95" title="下載單一 index.html 檔案以便直接上傳 EZPAGE">
+          <span>💾</span>
+          <span>下載 index.html</span>
+        </button>
+
+        <button @click="toggleSound" class="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 transition" :title="soundEnabled ? '靜音' : '開啟音效'">
+          <span>{{ soundEnabled ? '🔊' : '🔇' }}</span>
+        </button>
+
+        <button @click="showRulesModal = true" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+          <span>📖</span>
+          <span class="hidden md:inline">規則說明</span>
+        </button>
+
+        <button @click="showTeacherModal = true" class="px-3 py-1.5 bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/80 text-indigo-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+          <span>🕵️</span>
+          <span class="hidden md:inline">教師控制</span>
+        </button>
+
+        <button v-if="!gameState.isSettlement" @click="startSettlement" class="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-slate-950 rounded-xl text-xs font-black shadow-lg shadow-amber-500/20 transition transform active:scale-95">
+          🎯 結算真相
+        </button>
+
+        <button v-else-if="settlementStep < 8" @click="advanceSettlement" class="px-3.5 py-1.5 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 text-white rounded-xl text-xs font-black shadow-lg transition transform active:scale-95 flex items-center gap-1">
+          <span>⏩</span>
+          <span>翻開下一筆記</span>
+        </button>
+
+        <button v-else-if="!scoresRevealed" @click="finalizeScores" class="px-3.5 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 text-slate-950 rounded-xl text-xs font-black shadow-lg transition transform active:scale-95 animate-bounce flex items-center gap-1">
+          <span>💎</span>
+          <span>公布點數與冠軍</span>
+        </button>
+
+        <button @click="openResetConfirm" class="p-2 bg-slate-800 hover:bg-red-950/80 hover:text-red-400 border border-slate-700 text-slate-400 rounded-xl transition" title="重置開局">
+          🔄
+        </button>
+      </div>
+    </header>
+
+    <!-- 主舞台：環狀 8 則文史筆記 + 中央 4x4 地標方陣 + 境外流失區 -->
+    <main class="flex-1 flex flex-col justify-center items-center my-1">
+      <div class="w-full grid grid-cols-12 gap-2 lg:gap-3 items-center">
+        
+        <!-- 左側直行：筆記 1、筆記 2 -->
+        <div class="col-span-12 md:col-span-2 flex flex-col gap-2.5 justify-center">
+          <div class="text-xs font-bold text-slate-400 tracking-wider text-center uppercase flex items-center justify-center gap-1 font-tech">
+            <span>📜</span><span>西側筆記 (West)</span>
+          </div>
+          <div v-for="clue in [clues[0], clues[1]]" :key="clue ? clue.id : 0" class="w-full">
+            <clue-card v-if="clue" :clue="clue" :current-team="currentTeam" :is-settling="gameState.isSettlement" :get-team-color="getTeamColor" :get-team-name="getTeamName" @investigate="handleClueClick(clue)" />
+          </div>
+        </div>
+
+        <!-- 中央主區：頂部筆記 (3, 4) + 4x4 地標矩陣 + 底部筆記 (5, 6) -->
+        <div class="col-span-12 md:col-span-8 flex flex-col items-center">
+          
+          <!-- 頂部橫向筆記 (3, 4) -->
+          <div class="w-full grid grid-cols-2 gap-3 mb-2">
+            <div v-for="clue in [clues[2], clues[3]]" :key="clue ? clue.id : 0">
+              <clue-card v-if="clue" :clue="clue" :current-team="currentTeam" :is-settling="gameState.isSettlement" :get-team-color="getTeamColor" :get-team-name="getTeamName" @investigate="handleClueClick(clue)" />
+            </div>
+          </div>
+
+          <!-- 4x4 地標卡矩陣 (16 格) -->
+          <div class="w-full grid grid-cols-4 gap-2 lg:gap-2.5 bg-slate-900/60 p-2.5 lg:p-3 rounded-2xl border-2 border-slate-700/80 shadow-2xl relative backdrop-blur-sm">
+            
+            <div v-for="loc in locations" :key="loc.id"
+                 @click="handleLocationClick(loc)"
+                 class="relative aspect-[4/3] rounded-xl p-2 cursor-pointer transition-all duration-300 flex flex-col justify-between overflow-hidden border group select-none"
+                 :class="[
+                   loc.eliminated ? 'bg-slate-950/90 border-red-900/50 opacity-40 grayscale scale-95' : 'bg-gradient-to-br from-slate-800/90 to-slate-900/90 hover:from-slate-800 hover:to-slate-850 border-slate-600/70 hover:border-amber-400 hover:shadow-xl hover:shadow-amber-500/10',
+                   isWinnerLocation(loc) ? 'winner-pulse ring-4 ring-amber-400 z-20 !opacity-100 !grayscale-0 !scale-100' : ''
+                 ]">
+              
+              <!-- 坐標標籤 (A1 ~ D4) 與年代 -->
+              <div class="flex items-center justify-between text-[11px] font-bold">
+                <span class="px-1.5 py-0.5 rounded bg-slate-950/80 text-amber-300 font-tech border border-slate-700/60">
+                  {{ loc.coord }}
+                </span>
+                <span class="text-[10px] px-1.5 py-0.5 rounded font-semibold" 
+                      :class="loc.era === 'ancient' ? 'bg-amber-950/80 text-amber-300 border border-amber-800/50' : 'bg-cyan-950/80 text-cyan-300 border border-cyan-800/50'">
+                  {{ loc.eraLabel }}
+                </span>
+              </div>
+
+              <!-- 地標名稱與圖示 -->
+              <div class="text-center my-auto px-0.5">
+                <div class="text-2xl mb-0.5 transform group-hover:scale-110 transition duration-200">{{ loc.icon }}</div>
+                <div class="text-xs lg:text-sm font-extrabold text-slate-100 tracking-tight leading-tight line-clamp-1 drop-shadow">
+                  {{ loc.name }}
+                </div>
+                <div class="text-[10px] text-slate-400 mt-0.5 line-clamp-1">
+                  {{ loc.categoryLabel }} · {{ loc.isOuter ? '外圍圈' : '核心區' }}
+                </div>
+              </div>
+
+              <!-- 疊放的下注信心點數籌碼 -->
+              <div class="flex items-center justify-start flex-wrap gap-1 min-h-[22px] z-10">
+                <div v-for="(bet, bIdx) in loc.bets" :key="bIdx"
+                     class="px-1.5 py-0.5 rounded font-tech text-[10px] font-black shadow border border-slate-900/80 flex items-center justify-center transform hover:scale-125 transition"
+                     :style="{ backgroundColor: getTeamColor(bet.teamId), color: '#ffffff' }"
+                     :title="scoresRevealed || showCheatTokens ? `${getTeamName(bet.teamId)}: ${bet.points} 點` : `${getTeamName(bet.teamId)} 的秘密信心注`">
+                  <span v-if="scoresRevealed || showCheatTokens">{{ bet.points }}</span>
+                  <span v-else>？</span>
+                </div>
+              </div>
+
+              <!-- 排除蓋印標籤 -->
+              <div v-if="loc.eliminated" class="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
+                <div class="stamp-eliminated border-[3px] border-red-500 bg-red-950/90 text-red-400 font-black px-3 py-1 rounded-lg text-xs lg:text-sm tracking-widest uppercase shadow-2xl">
+                  ✕ 排除
+                </div>
+              </div>
+
+              <!-- 贏家秘寶標記 -->
+              <div v-if="isWinnerLocation(loc)" class="absolute top-1 right-1 z-30 bg-amber-400 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-full shadow-lg flex items-center gap-0.5 animate-bounce">
+                <span>👑 秘寶所在</span>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- 底部橫向筆記 (5, 6) -->
+          <div class="w-full grid grid-cols-2 gap-3 mt-2">
+            <div v-for="clue in [clues[4], clues[5]]" :key="clue ? clue.id : 0">
+              <clue-card v-if="clue" :clue="clue" :current-team="currentTeam" :is-settling="gameState.isSettlement" :get-team-color="getTeamColor" :get-team-name="getTeamName" @investigate="handleClueClick(clue)" />
+            </div>
+          </div>
+        </div>
+
+        <!-- 右側直行：筆記 7、筆記 8 + 「境外流失」特殊下注區 -->
+        <div class="col-span-12 md:col-span-2 flex flex-col gap-2.5 justify-center">
+          <div class="text-xs font-bold text-slate-400 tracking-wider text-center uppercase flex items-center justify-center gap-1 font-tech">
+            <span>📜</span><span>東側筆記 (East)</span>
+          </div>
+
+          <div v-for="clue in [clues[6], clues[7]]" :key="clue ? clue.id : 0" class="w-full">
+            <clue-card v-if="clue" :clue="clue" :current-team="currentTeam" :is-settling="gameState.isSettlement" :get-team-color="getTeamColor" :get-team-name="getTeamName" @investigate="handleClueClick(clue)" />
+          </div>
+
+          <!-- 特殊下注區：境外流失（全數排除逃生門） -->
+          <div @click="handleEscapeZoneClick"
+               class="aspect-[4/3] rounded-xl p-2.5 border-2 border-dashed cursor-pointer transition duration-300 flex flex-col justify-between relative group select-none"
+               :class="[
+                 escapeLocation.eliminated ? 'bg-slate-950/80 border-slate-700 opacity-40' : 'bg-gradient-to-br from-purple-950/40 to-slate-900 border-purple-500/70 hover:border-purple-400 hover:shadow-xl hover:shadow-purple-500/20',
+                 isWinnerEscape ? 'winner-pulse ring-4 ring-amber-400 z-20 !opacity-100' : ''
+               ]">
+            <div class="flex items-center justify-between text-[11px] font-bold">
+              <span class="px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800 font-tech">逃生門</span>
+              <span class="text-[10px] text-purple-400">16 處皆非</span>
+            </div>
+            <div class="text-center my-auto">
+              <div class="text-2xl mb-0.5">🚪💨</div>
+              <div class="text-xs font-black text-purple-200">境外流失（傳說落空）</div>
+              <div class="text-[9px] text-slate-400">若 16 個地標全被排除即在此</div>
+            </div>
+            <!-- 下注信心點數籌碼 -->
+            <div class="flex items-center justify-start flex-wrap gap-1 min-h-[22px]">
+              <div v-for="(bet, bIdx) in escapeLocation.bets" :key="bIdx"
+                   class="px-1.5 py-0.5 rounded font-tech text-[10px] font-black shadow border border-slate-900/80"
+                   :style="{ backgroundColor: getTeamColor(bet.teamId), color: '#ffffff' }">
+                <span v-if="scoresRevealed || showCheatTokens">{{ bet.points }}</span>
+                <span v-else>？</span>
+              </div>
+            </div>
+            <!-- 贏家標記 -->
+            <div v-if="isWinnerEscape" class="absolute top-1 right-1 z-30 bg-amber-400 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-full shadow animate-bounce">
+              👑 寶藏在此！
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+
+    <!-- 底部儀表板：4 支探險隊能量點數池、投資線索與操作指引 -->
+    <footer class="bg-slate-900/90 backdrop-blur border border-slate-700/80 rounded-2xl p-3 shadow-2xl mt-1">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        
+        <div v-for="team in teams" :key="team.id"
+             class="rounded-xl p-3 border transition-all duration-300 relative flex flex-col justify-between"
+             :class="[
+               team.id === currentTeam.id && !gameState.isSettlement ? 'bg-slate-800 ring-2 shadow-xl border-transparent' : 'bg-slate-950/70 border-slate-800 opacity-85',
+             ]"
+             :style="{ ringColor: team.color }">
+          
+          <!-- 隊伍抬頭與總分/可用能量 -->
+          <div class="flex items-center justify-between mb-1.5">
+            <div class="flex items-center gap-2">
+              <span class="w-3.5 h-3.5 rounded-full" :style="{ backgroundColor: team.color }"></span>
+              <span class="font-extrabold text-sm text-slate-200">{{ team.name }}</span>
+            </div>
+            <div class="text-xs font-tech font-bold px-2 py-0.5 rounded bg-slate-900 border border-slate-700">
+              <span v-if="scoresRevealed" class="text-amber-400 text-sm font-black">得分: {{ team.score }} 分</span>
+              <span v-else :style="{ color: team.color }">剩餘: {{ team.energy }} / 40 點</span>
+            </div>
+          </div>
+
+          <!-- 能量條可視化 -->
+          <div class="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden border border-slate-800 mb-2">
+            <div class="h-full transition-all duration-500 ease-out"
+                 :style="{ width: `${(team.energy / 40) * 100}%`, backgroundColor: team.color }"></div>
+          </div>
+
+          <!-- 隊伍歷史足跡統計 -->
+          <div class="flex items-center justify-between text-[11px] text-slate-400 font-tech">
+            <span>解鎖筆記: {{ getTeamInvestedCluesCount(team.id) }} 則</span>
+            <span>已下注處: {{ getTeamBetsCount(team.id) }} 處</span>
+            <span class="text-amber-300 font-bold">押注總點: {{ getTeamTotalBetPoints(team.id) }} 點</span>
+          </div>
+
+          <!-- 行動提示 -->
+          <div v-if="team.id === currentTeam.id && !gameState.isSettlement" class="text-[11px] text-center mt-2 font-bold text-amber-300/90 animate-pulse bg-amber-500/10 rounded-lg py-0.5 border border-amber-500/20">
+            👉 請代表點擊【文史筆記】調閱，或點擊【地標】下注！
+          </div>
+        </div>
+
+      </div>
+    </footer>
+
+    <!-- 【彈窗 1】：調查線索競價解鎖彈窗 -->
+    <div v-if="modalState.clueBidding" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+      <div class="bg-slate-900 border-2 border-amber-500/80 rounded-3xl p-6 lg:p-7 max-w-md w-full shadow-2xl flex flex-col gap-4 text-slate-100">
+        <div class="flex items-center gap-3">
+          <span class="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 text-2xl">🔍</span>
+          <div>
+            <h3 class="font-extrabold text-lg text-slate-100">調閱文史筆記 #{{ activeClue.id }}</h3>
+            <p class="text-xs text-slate-400">目前封鎖門檻：{{ activeClue.currentBid > 0 ? activeClue.currentBid + ' 點' : '無 (起標 2 點)' }}</p>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col gap-3">
+          <div class="flex justify-between text-xs text-slate-300">
+            <span>{{ currentTeam.name }} 可用探勘能量:</span>
+            <span class="font-bold text-amber-400 font-tech text-sm">{{ currentTeam.energy }} 點</span>
+          </div>
+
+          <div v-if="currentTeam.energy >= minBidRequired">
+            <label class="text-xs text-slate-400 block mb-1.5">決定投入的解鎖點數（需 &ge; {{ minBidRequired }} 點）：</label>
+            <div class="flex items-center gap-3">
+              <input type="range" :min="minBidRequired" :max="Math.min(currentTeam.energy, 20)" v-model.number="clueBidPoints" class="w-full accent-amber-500">
+              <span class="text-xl font-bold font-tech text-amber-400 w-16 text-right">{{ clueBidPoints }} 點</span>
+            </div>
+            <div class="flex gap-2 mt-2">
+              <button @click="clueBidPoints = minBidRequired" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-tech">最低門檻</button>
+              <button v-if="currentTeam.energy >= minBidRequired + 2" @click="clueBidPoints = minBidRequired + 2" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-tech">+2點加碼封鎖</button>
+              <button v-if="currentTeam.energy >= minBidRequired + 5" @click="clueBidPoints = minBidRequired + 5" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-tech">+5點強力鎖定</button>
+            </div>
+          </div>
+          <div v-else class="text-xs text-red-400 font-bold p-2 bg-red-950/40 rounded-lg border border-red-900/60">
+            ⚠️ 剩餘能量 ({{ currentTeam.energy }} 點) 低於解鎖門檻 ({{ minBidRequired }} 點)，無法調閱此筆記！
+          </div>
+        </div>
+
+        <p class="text-[11px] text-slate-400 leading-normal">
+          💡 提示：投入的點數將自點數池永久扣除。出資越高，後續小組調閱時需支付更高點數！
+        </p>
+
+        <div class="flex gap-2.5">
+          <button @click="modalState.clueBidding = false" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition">
+            返回地圖
+          </button>
+          <button :disabled="currentTeam.energy < minBidRequired" @click="confirmClueInvest" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 text-slate-950 font-black text-xs transition disabled:opacity-40 disabled:cursor-not-allowed">
+            支付 {{ clueBidPoints }} 點閱看
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 【彈窗 2】：防窺閱看倒數彈窗 (5 秒自動關閉) -->
+    <div v-if="modalState.peepWindow" class="fixed inset-0 bg-slate-950/95 backdrop-blur-lg z-50 flex items-center justify-center p-6 select-none">
+      <div class="max-w-xl w-full bg-slate-900 border-2 border-amber-500/90 p-8 rounded-3xl shadow-2xl flex flex-col items-center text-center gap-6 relative overflow-hidden">
+        
+        <!-- 倒數進度條 -->
+        <div class="absolute top-0 left-0 h-2 bg-gradient-to-r from-amber-500 to-yellow-400 transition-all duration-1000 ease-linear"
+             :style="{ width: `${(countdown / 5) * 100}%` }"></div>
+
+        <div class="flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-500/40">
+          <span>🛡️ {{ currentTeam.name }} 代表專屬閱覽視窗（請勿朗讀）</span>
+        </div>
+
+        <div class="text-2xl lg:text-3xl font-black text-amber-300 leading-relaxed px-5 py-6 rounded-2xl bg-slate-950 border border-slate-800 w-full shadow-inner">
+          {{ activeClue.text }}
+        </div>
+
+        <div class="w-full flex flex-col gap-2 items-center">
+          <span class="text-xs text-slate-400">請默記在心，視窗將在倒數後自動關閉</span>
+          <span class="font-tech text-amber-400 font-extrabold text-2xl">{{ countdown }} 秒</span>
+        </div>
+
+        <button @click="closePeepWindow" class="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition border border-slate-700">
+          我已記住，返回小組（立即關閉）
+        </button>
+      </div>
+    </div>
+
+    <!-- 【彈窗 3】：下注地點信心點數自由分配 -->
+    <div v-if="modalState.betting" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+      <div class="bg-slate-900 border-2 border-indigo-500/80 p-6 lg:p-7 rounded-3xl max-w-md w-full shadow-2xl flex flex-col gap-4 text-slate-100">
+        <div class="flex items-center gap-3">
+          <span class="p-2.5 rounded-xl bg-indigo-500/20 text-indigo-400 text-2xl">🎯</span>
+          <div>
+            <h3 class="font-extrabold text-lg text-slate-100">下注藏寶處：{{ activeTargetName }}</h3>
+            <p class="text-xs text-slate-400">面朝下押注，點數數值完全保密</p>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col gap-3">
+          <div class="flex justify-between text-xs text-slate-300">
+            <span>{{ currentTeam.name }} 可用探勘能量:</span>
+            <span class="font-bold text-indigo-400 font-tech text-sm">{{ currentTeam.energy }} 點</span>
+          </div>
+
+          <div v-if="currentTeam.energy > 0">
+            <label class="text-xs text-slate-400 block mb-1.5">決定投入的信心點數：</label>
+            <div class="flex items-center gap-3">
+              <input type="range" min="1" :max="currentTeam.energy" v-model.number="betPoints" class="w-full accent-indigo-500">
+              <span class="text-2xl font-bold font-tech text-indigo-400 w-16 text-right">{{ betPoints }} 點</span>
+            </div>
+
+            <!-- 快速分配快捷鈕 -->
+            <div class="flex gap-2 pt-2">
+              <button @click="betPoints = 2" :disabled="currentTeam.energy < 2" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-tech">2點</button>
+              <button @click="betPoints = 5" :disabled="currentTeam.energy < 5" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-tech">5點</button>
+              <button @click="betPoints = 10" :disabled="currentTeam.energy < 10" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-tech">10點</button>
+              <button @click="betPoints = currentTeam.energy" class="px-2.5 py-1 rounded bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 text-xs font-black font-tech">全押 All-in</button>
+            </div>
+          </div>
+          <div v-else class="text-xs text-red-400 font-bold p-2 bg-red-950/40 rounded-lg border border-red-900/60">
+            ⚠️ 隊伍能量已耗盡，無法再進行下注！
+          </div>
+        </div>
+
+        <p class="text-[11px] text-slate-400 leading-normal">
+          ⚠️ 結算機制：若此地確實是真秘寶，所押點數<b>全數轉換為最終得分</b>；若猜錯則點數全額耗損！
+        </p>
+
+        <div class="flex gap-2.5">
+          <button @click="modalState.betting = false" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition">
+            取消
+          </button>
+          <button :disabled="currentTeam.energy <= 0" @click="confirmPlaceBet" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-600 text-slate-950 font-black text-xs transition disabled:opacity-40 disabled:cursor-not-allowed">
+            確認下注 {{ betPoints }} 點
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 【教師控制台 & 答案預覽】 -->
+    <div v-if="showTeacherModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-slate-900 border border-indigo-500/50 rounded-3xl p-6 max-w-xl w-full shadow-2xl max-h-[85vh] flex flex-col">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
+          <div class="flex items-center gap-2">
+            <span class="text-2xl">🕵️</span>
+            <h3 class="text-lg font-black text-indigo-300">教師引導控制台 (不公開給學生)</h3>
+          </div>
+          <button @click="showTeacherModal = false" class="text-slate-400 hover:text-white text-xl">✕</button>
+        </div>
+
+        <div class="overflow-y-auto space-y-4 pr-1 text-sm">
+          <!-- 本局真實秘寶所在地 -->
+          <div class="bg-indigo-950/40 border border-indigo-700/60 p-3.5 rounded-xl">
+            <div class="text-xs font-bold text-indigo-300 mb-1">👑 本局真實秘寶所在地：</div>
+            <div class="text-lg font-black text-amber-300">
+              {{ secretTreasure ? `${secretTreasure.coord} - ${secretTreasure.name} (${secretTreasure.eraLabel} / ${secretTreasure.categoryLabel})` : '境外流失（16 處皆非）' }}
+            </div>
+          </div>
+
+          <!-- 8 條線索清單 -->
+          <div class="bg-slate-800/60 border border-slate-700 p-3.5 rounded-xl">
+            <div class="text-xs font-bold text-slate-300 mb-2">📜 8 則文史排除筆記一覽：</div>
+            <ol class="space-y-1.5 text-xs text-slate-300 list-decimal list-inside">
+              <li v-for="c in clues" :key="c.id" class="p-1 rounded hover:bg-slate-800">
+                <span class="font-bold text-amber-400 font-tech">#{{ c.id }}</span>: {{ c.text }}
+                <span v-if="c.currentBid > 0" class="text-cyan-400 font-bold ml-1 font-tech">(鎖定 {{ c.currentBid }} 點)</span>
+              </li>
+            </ol>
+          </div>
+
+          <!-- 便捷操作 -->
+          <div class="flex items-center gap-3">
+            <button @click="showCheatTokens = !showCheatTokens" class="flex-1 py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl border border-slate-700 transition text-xs">
+              {{ showCheatTokens ? '🙈 隱藏面朝下點數' : '👁️ 透視所有面朝下點數' }}
+            </button>
+            <button @click="startSettlement(); showTeacherModal = false;" class="flex-1 py-2.5 px-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl transition text-xs">
+              直接進入真相結算
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 【結算頒獎典禮排行榜】 -->
+    <div v-if="showVictoryModal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+      <div class="bg-slate-900 border-2 border-amber-400 rounded-3xl p-6 lg:p-8 max-w-lg w-full shadow-2xl text-center relative">
+        <div class="text-5xl mb-2 animate-bounce">🏆</div>
+        <h2 class="text-2xl lg:text-3xl font-black bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-500 bg-clip-text text-transparent mb-1">
+          探險隊總成績結算榜
+        </h2>
+        <p class="text-xs text-slate-400 mb-5">
+          真秘寶藏匿於：<strong class="text-amber-300 text-sm font-bold">{{ secretTreasure ? `${secretTreasure.coord} ${secretTreasure.name}` : '境外流失區 (傳說落空)' }}</strong>
+        </p>
+
+        <!-- 排名列表 -->
+        <div class="space-y-2.5 mb-6">
+          <div v-for="(rank, idx) in sortedTeams" :key="rank.id"
+               class="flex items-center justify-between p-3.5 rounded-2xl border transition"
+               :class="idx === 0 ? 'bg-amber-950/50 border-amber-500/80 shadow-lg shadow-amber-500/20 ring-1 ring-amber-400' : 'bg-slate-950 border-slate-800'">
+            <div class="flex items-center gap-3">
+              <span class="w-7 h-7 rounded-full flex items-center justify-center font-black font-tech text-sm"
+                    :class="idx === 0 ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-slate-400'">
+                {{ idx + 1 }}
+              </span>
+              <span class="font-extrabold text-base" :style="{ color: rank.color }">{{ rank.name }}</span>
+            </div>
+            <div class="flex items-center gap-3 font-tech">
+              <span class="text-xs text-slate-400">剩餘: {{ rank.energy }} 點</span>
+              <div class="text-lg font-black text-amber-400">
+                {{ rank.score }} <span class="text-xs text-slate-400 font-normal">分</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex gap-3">
+          <button @click="showVictoryModal = false" class="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl transition text-xs">
+            返回地圖檢視全盤
+          </button>
+          <button @click="initNewGame" class="flex-1 py-3 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 text-slate-950 font-black rounded-xl shadow-lg transition text-xs">
+            重新展開新局
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 【遊戲規則說明彈窗】 -->
+    <div v-if="showRulesModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 max-w-xl w-full shadow-2xl max-h-[85vh] flex flex-col">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
+          <div class="flex items-center gap-2">
+            <span class="text-2xl">📖</span>
+            <h3 class="text-lg font-black text-slate-100">探尋秘寶：信心點數池規則說明</h3>
+          </div>
+          <button @click="showRulesModal = false" class="text-slate-400 hover:text-white text-xl">✕</button>
+        </div>
+        <div class="overflow-y-auto space-y-3.5 text-xs lg:text-sm text-slate-300 pr-1 leading-relaxed">
+          <div class="p-3 bg-slate-800/60 rounded-xl">
+            <strong class="text-amber-400 block mb-1">🎯 遊戲目標</strong>
+            全班分為 4 支探險隊，每隊起始擁有 <strong>40 點探勘能量</strong>。透過 8 則「否定排除」文史筆記縮小範圍，找出藏寶地並獲取最高得分！
+          </div>
+          <div class="p-3 bg-slate-800/60 rounded-xl">
+            <strong class="text-amber-400 block mb-1">🎮 每回合行動（2 選 1，共 6 回合）</strong>
+            <ul class="list-disc list-inside space-y-1.5">
+              <li><strong>【調閱文史筆記】：</strong>投入能量點數解鎖筆記。若該筆記已有隊伍查閱，需支付 <strong>&ge; 當前最高出資</strong>。代表享有 5 秒防窺閱覽視窗。</li>
+              <li><strong>【下注信心點數】：</strong>拉動滑桿自由投入 1 ~ 剩餘全部點數。點數面朝下保密，他人只能看見隊伍顏色標記「？」。</li>
+            </ul>
+          </div>
+          <div class="p-3 bg-slate-800/60 rounded-xl">
+            <strong class="text-amber-400 block mb-1">⚖️ 真相結算與計分</strong>
+            第 6 回合結束後逐一翻開 8 則筆記，符合排除條件的地標會蓋上紅色印章並淘汰。最後留在場上的地點為秘寶，<strong>唯有押在該地點上的點數會 100% 轉為最終得分</strong>！
+          </div>
+        </div>
+        <button @click="showRulesModal = false" class="w-full mt-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl transition text-xs">
+          了解規則，關閉說明
+        </button>
+      </div>
+    </div>
+
+    <!-- 自訂確認對話方塊（取代 window.confirm） -->
+    <div v-if="confirmDialog.show" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-slate-900 border border-slate-700 p-6 rounded-2xl max-w-sm w-full shadow-2xl text-center">
+        <div class="text-3xl mb-2">🔄</div>
+        <h4 class="text-base font-bold text-slate-100 mb-2">{{ confirmDialog.title }}</h4>
+        <p class="text-xs text-slate-400 mb-5">{{ confirmDialog.message }}</p>
+        <div class="flex gap-2">
+          <button @click="confirmDialog.show = false" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition">
+            取消
+          </button>
+          <button @click="executeConfirmAction" class="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition">
+            確定重置
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 浮動 Toast 提示 -->
+    <transition enter-active-class="transform transition ease-out duration-300" enter-from-class="translate-y-4 opacity-0" enter-to-class="translate-y-0 opacity-100" leave-active-class="transition ease-in duration-200" leave-from-class="opacity-100" leave-to-class="opacity-0">
+      <div v-if="toastMessage" class="fixed bottom-24 left-1/2 transform -translate-x-1/2 bg-slate-900/95 border border-amber-500/80 text-amber-300 font-bold px-4 py-2.5 rounded-2xl shadow-2xl z-50 flex items-center gap-2 text-xs md:text-sm backdrop-blur-sm">
+        <span>🔔</span>
+        <span>{{ toastMessage }}</span>
+      </div>
+    </transition>
+
+  </div>
+
+  <!-- 單一線索卡元件樣板 -->
+  <template id="clue-card-template">
+    <div @click="$emit('investigate')"
+         class="rounded-xl p-2.5 border transition-all duration-300 cursor-pointer relative select-none flex flex-col justify-between h-[98px] group"
+         :class="[
+           clue.revealed ? 'bg-amber-950/40 border-amber-500/80 shadow-md ring-1 ring-amber-400/50' : 
+           (clue.currentBid > 0 ? 'bg-slate-900 border-cyan-700/60' : 'bg-slate-900/80 border-slate-700/70 hover:border-amber-400 hover:shadow-lg')
+         ]">
+      
+      <!-- 線索抬頭與門檻 -->
+      <div class="flex items-center justify-between text-[11px] font-bold">
+        <span class="text-amber-400 font-tech">筆記 #{{ clue.id }}</span>
+        <span v-if="clue.revealed" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500 text-slate-950 font-black">
+          已公開
+        </span>
+        <span v-else-if="clue.currentBid > 0" class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 font-tech">
+          門檻: {{ clue.currentBid }} 點
+        </span>
+        <span v-else class="text-[10px] text-slate-500 group-hover:text-amber-300 transition font-tech">
+          起標: 2 點
+        </span>
+      </div>
+
+      <!-- 線索內容呈現 -->
+      <div class="my-auto">
+        <p v-if="clue.revealed" class="text-xs font-black text-amber-200 line-clamp-2 leading-tight">
+          {{ clue.text }}
+        </p>
+        <div v-else class="flex items-center justify-center gap-1.5 text-slate-400 py-1">
+          <span class="text-lg">🔒</span>
+          <span class="text-xs font-semibold">機密文史筆記</span>
+        </div>
+      </div>
+
+      <!-- 疊放在線索上的隊伍調閱紀錄 -->
+      <div class="flex items-center gap-1 min-h-[18px]">
+        <div v-for="(b, i) in clue.investors" :key="i"
+             class="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black border border-slate-900 shadow"
+             :style="{ backgroundColor: getTeamColor(b.teamId), color: '#ffffff' }"
+             :title="`${getTeamName(b.teamId)} 投入 ${b.points} 點`">
+          <span>{{ b.teamId }}</span>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <script>
+    // 瀏覽器 Web Audio API 合成音效引擎（完全自包含，不依賴外部音效檔案）
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.enabled = true;
+      }
+      init() {
+        try {
+          if (!this.ctx) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (AudioContext) this.ctx = new AudioContext();
+          }
+          if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume();
+          }
+        } catch (e) {
+          console.warn("音訊上下文啟動受限:", e);
+        }
+      }
+      playClick() {
+        if (!this.enabled) return;
+        try {
+          this.init();
+          if (!this.ctx) return;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(460, this.ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(920, this.ctx.currentTime + 0.08);
+          gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.08);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.08);
+        } catch (e) {}
+      }
+      playTokenDrop() {
+        if (!this.enabled) return;
+        try {
+          this.init();
+          if (!this.ctx) return;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(540, this.ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(270, this.ctx.currentTime + 0.12);
+          gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.12);
+        } catch (e) {}
+      }
+      playEliminateThud() {
+        if (!this.enabled) return;
+        try {
+          this.init();
+          if (!this.ctx) return;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(35, this.ctx.currentTime + 0.28);
+          gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.28);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.28);
+        } catch (e) {}
+      }
+      playVictoryFanfare() {
+        if (!this.enabled) return;
+        try {
+          this.init();
+          if (!this.ctx) return;
+          const notes = [523.25, 659.25, 783.99, 1046.5];
+          notes.forEach((freq, i) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime + i * 0.14);
+            gain.gain.setValueAtTime(0.25, this.ctx.currentTime + i * 0.14);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + i * 0.14 + 0.4);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(this.ctx.currentTime + i * 0.14);
+            osc.stop(this.ctx.currentTime + i * 0.14 + 0.4);
+          });
+        } catch (e) {}
+      }
+    }
+    const sound = new SoundEngine();
+
+    const LANDMARKS_DATA = [
+      { id: 1, coord: "A1", name: "百年土地公廟", icon: "⛩️", era: "ancient", eraLabel: "歷史>50年", category: "religion", categoryLabel: "信仰祭祀", isOuter: true, row: 0, col: 0 },
+      { id: 2, coord: "A2", name: "社區運動公園", icon: "⚽", era: "modern", eraLabel: "現代<30年", category: "sport", categoryLabel: "運動休閒", isOuter: true, row: 0, col: 1 },
+      { id: 3, coord: "A3", name: "百年老餅舖", icon: "🥮", era: "ancient", eraLabel: "歷史>50年", category: "biz", categoryLabel: "商業飲食", isOuter: true, row: 0, col: 2 },
+      { id: 4, coord: "A4", name: "現代運動中心", icon: "🏊", era: "modern", eraLabel: "現代<30年", category: "sport", categoryLabel: "運動休閒", isOuter: true, row: 0, col: 3 },
+
+      { id: 5, coord: "B1", name: "舊水圳親水步道", icon: "🌊", era: "ancient", eraLabel: "歷史>50年", category: "nature", categoryLabel: "水域生態", isOuter: true, row: 1, col: 0 },
+      { id: 6, coord: "B2", name: "在地歷史小學", icon: "🏫", era: "ancient", eraLabel: "歷史>50年", category: "edu", categoryLabel: "文教閱讀", isOuter: false, row: 1, col: 1 },
+      { id: 7, coord: "B3", name: "獨立文創書店", icon: "📚", era: "modern", eraLabel: "現代<30年", category: "edu", categoryLabel: "文教閱讀", isOuter: false, row: 1, col: 2 },
+      { id: 8, coord: "B4", name: "庄頭活動中心", icon: "🏛️", era: "modern", eraLabel: "現代<30年", category: "expo", categoryLabel: "聚落集會", isOuter: true, row: 1, col: 3 },
+
+      { id: 9, coord: "C1", name: "眷村文化聚落", icon: "🏘️", era: "ancient", eraLabel: "歷史>50年", category: "expo", categoryLabel: "聚落古蹟", isOuter: true, row: 2, col: 0 },
+      { id: 10, coord: "C2", name: "大型圖書館", icon: "📖", era: "modern", eraLabel: "現代<30年", category: "edu", categoryLabel: "文教閱讀", isOuter: false, row: 2, col: 1 },
+      { id: 11, coord: "C3", name: "庄頭百年老樹", icon: "🌳", era: "ancient", eraLabel: "歷史>50年", category: "nature", categoryLabel: "綠地自然", isOuter: false, row: 2, col: 2 },
+      { id: 12, coord: "C4", name: "青年庇護工場", icon: "☕", era: "modern", eraLabel: "現代<30年", category: "biz", categoryLabel: "商業飲食", isOuter: true, row: 2, col: 3 },
+
+      { id: 13, coord: "D1", name: "歷史傳統洋樓", icon: "🏰", era: "ancient", eraLabel: "歷史>50年", category: "expo", categoryLabel: "聚落古蹟", isOuter: true, row: 3, col: 0 },
+      { id: 14, coord: "D2", name: "現代科技展館", icon: "🤖", era: "modern", eraLabel: "現代<30年", category: "expo", categoryLabel: "文教展館", isOuter: true, row: 3, col: 1 },
+      { id: 15, coord: "D3", name: "在地香火大廟", icon: "🛕", era: "ancient", eraLabel: "歷史>50年", category: "religion", categoryLabel: "信仰祭祀", isOuter: true, row: 3, col: 2 },
+      { id: 16, coord: "D4", name: "社區綠園道", icon: "🌿", era: "modern", eraLabel: "現代<30年", category: "nature", categoryLabel: "綠地自然", isOuter: true, row: 3, col: 3 }
+    ];
+
+    const { createApp, ref, computed } = Vue;
+
+    const app = createApp({
+      setup() {
+        const soundEnabled = ref(true);
+        const showRulesModal = ref(false);
+        const showTeacherModal = ref(false);
+        const showVictoryModal = ref(false);
+        const showCheatTokens = ref(false);
+        const scoresRevealed = ref(false);
+        const toastMessage = ref('');
+
+        const confirmDialog = ref({
+          show: false,
+          title: '',
+          message: '',
+          action: null
+        });
+
+        // 4 支探險隊資料（起始各 40 點能量）
+        const teams = ref([
+          { id: 'A', name: '緋紅探險隊', color: '#ef4444', energy: 40, score: 0 },
+          { id: 'B', name: '湛藍巡查隊', color: '#38bdf8', energy: 40, score: 0 },
+          { id: 'C', name: '翠綠踏查隊', color: '#10b981', energy: 40, score: 0 },
+          { id: 'D', name: '琥珀拓荒隊', color: '#f59e0b', energy: 40, score: 0 },
+        ]);
+
+        const currentTeamIndex = ref(0);
+
+        // 局勢核心狀態
+        const gameState = ref({
+          currentRound: 1,
+          turnCount: 0,
+          isSettlement: false
+        });
+
+        const settlementStep = ref(0);
+        const locations = ref([]);
+        const escapeLocation = ref({
+          id: 'escape',
+          name: '境外流失',
+          bets: [],
+          eliminated: false
+        });
+        const clues = ref([]);
+        const secretTreasure = ref(null);
+
+        // 互動彈窗狀態
+        const modalState = ref({
+          clueBidding: false,
+          peepWindow: false,
+          betting: false
+        });
+
+        const activeClue = ref({});
+        const clueBidPoints = ref(2);
+        const countdown = ref(5);
+        let countdownTimer = null;
+
+        const activeTargetId = ref(null);
+        const activeTargetName = ref('');
+        const betPoints = ref(5);
+
+        const currentTeam = computed(() => teams.value[currentTeamIndex.value]);
+
+        const minBidRequired = computed(() => {
+          if (!activeClue.value) return 2;
+          return Math.max(2, (activeClue.value.currentBid || 0) + 1);
+        });
+
+        const generateGameSession = () => {
+          locations.value = LANDMARKS_DATA.map(loc => ({
+            ...loc,
+            bets: [],
+            eliminated: false
+          }));
+
+          escapeLocation.value.bets = [];
+          escapeLocation.value.eliminated = false;
+
+          // 隨機選定 1 處為秘寶所在（95% 落在 16 格中，5% 境外流失）
+          const isEscapeTarget = Math.random() < 0.05;
+          if (isEscapeTarget) {
+            secretTreasure.value = null;
+          } else {
+            const randomTargetIndex = Math.floor(Math.random() * locations.value.length);
+            secretTreasure.value = locations.value[randomTargetIndex];
+          }
+
+          // 嚴密否定排除規則庫
+          const rulePool = [
+            { text: "寶藏『不在』社區最外圍一圈的地標中", filter: loc => loc.isOuter },
+            { text: "寶藏『不在』中間 4 格核心聚落中", filter: loc => !loc.isOuter },
+            { text: "寶藏『不在』社區北半部（A、B 列）", filter: loc => loc.row < 2 },
+            { text: "寶藏『不在』社區南半部（C、D 列）", filter: loc => loc.row >= 2 },
+            { text: "寶藏『不在』社區西半部（第 1、2 欄）", filter: loc => loc.col < 2 },
+            { text: "寶藏『不在』社區東半部（第 3、4 欄）", filter: loc => loc.col >= 2 },
+            { text: "寶藏『不是』超過 50 年的歷史老地標", filter: loc => loc.era === 'ancient' },
+            { text: "寶藏『不是』近 30 年內建立的現代設施", filter: loc => loc.era === 'modern' },
+            { text: "寶藏『不在』宗教信仰與祭祀聖地中", filter: loc => loc.category === 'religion' },
+            { text: "寶藏『不在』綠地自然或親水步道中", filter: loc => loc.category === 'nature' },
+            { text: "寶藏『不在』運動休閒或體育場館中", filter: loc => loc.category === 'sport' },
+            { text: "寶藏『不在』文教學習或圖書空間中", filter: loc => loc.category === 'edu' },
+            { text: "寶藏『不在』商業飲食或老店商號中", filter: loc => loc.category === 'biz' },
+            { text: "寶藏『不在』公共聚落展館或洋樓中", filter: loc => loc.category === 'expo' }
+          ];
+
+          // 篩選出不會排除真實秘寶的規則
+          let validRules = [];
+          if (secretTreasure.value) {
+            validRules = rulePool.filter(rule => !rule.filter(secretTreasure.value));
+          } else {
+            validRules = [...rulePool];
+          }
+
+          validRules.sort(() => Math.random() - 0.5);
+          const chosenRules = validRules.slice(0, 8);
+
+          clues.value = chosenRules.map((r, i) => ({
+            id: i + 1,
+            text: r.text,
+            filter: r.filter,
+            currentBid: 0,
+            investors: [],
+            revealed: false
+          }));
+        };
+
+        const resetTeamsData = () => {
+          teams.value.forEach(t => {
+            t.energy = 40;
+            t.score = 0;
+          });
+          currentTeamIndex.value = 0;
+          gameState.value.currentRound = 1;
+          gameState.value.turnCount = 0;
+          gameState.value.isSettlement = false;
+          settlementStep.value = 0;
+          scoresRevealed.value = false;
+        };
+
+        const initNewGame = () => {
+          generateGameSession();
+          resetTeamsData();
+          showVictoryModal.value = false;
+          triggerToast("✨ 新局已建立！每隊配發 40 點探勘能量，尋寶開始！");
+        };
+
+        const triggerToast = (msg) => {
+          toastMessage.value = msg;
+          setTimeout(() => {
+            if (toastMessage.value === msg) toastMessage.value = '';
+          }, 3200);
+        };
+
+        const handleClueClick = (clue) => {
+          if (gameState.value.isSettlement) return;
+          activeClue.value = clue;
+          clueBidPoints.value = Math.max(minBidRequired.value, 2);
+          modalState.value.clueBidding = true;
+          sound.playClick();
+        };
+
+        const confirmClueInvest = () => {
+          if (currentTeam.value.energy < clueBidPoints.value) {
+            triggerToast(`⚠️ ${currentTeam.value.name} 剩餘能量不足！`);
+            return;
+          }
+
+          currentTeam.value.energy -= clueBidPoints.value;
+          activeClue.value.currentBid = clueBidPoints.value;
+          activeClue.value.investors.push({
+            teamId: currentTeam.value.id,
+            points: clueBidPoints.value
+          });
+
+          modalState.value.clueBidding = false;
+          sound.playTokenDrop();
+
+          // 啟動 5 秒防窺彈窗
+          modalState.value.peepWindow = true;
+          countdown.value = 5;
+          clearInterval(countdownTimer);
+          countdownTimer = setInterval(() => {
+            countdown.value--;
+            if (countdown.value <= 0) {
+              closePeepWindow();
+            }
+          }, 1000);
+        };
+
+        const closePeepWindow = () => {
+          clearInterval(countdownTimer);
+          modalState.value.peepWindow = false;
+          advanceTurn();
+        };
+
+        const handleLocationClick = (loc) => {
+          if (gameState.value.isSettlement) return;
+          if (loc.eliminated) return;
+          activeTargetId.value = loc.id;
+          activeTargetName.value = `${loc.coord} ${loc.name}`;
+          betPoints.value = Math.min(5, Math.max(1, currentTeam.value.energy));
+          modalState.value.betting = true;
+          sound.playClick();
+        };
+
+        const handleEscapeZoneClick = () => {
+          if (gameState.value.isSettlement) return;
+          activeTargetId.value = 'escape';
+          activeTargetName.value = '境外流失區 (傳說落空)';
+          betPoints.value = Math.min(5, Math.max(1, currentTeam.value.energy));
+          modalState.value.betting = true;
+          sound.playClick();
+        };
+
+        const confirmPlaceBet = () => {
+          if (currentTeam.value.energy < betPoints.value) {
+            triggerToast(`⚠️ ${currentTeam.value.name} 剩餘能量不足！`);
+            return;
+          }
+
+          currentTeam.value.energy -= betPoints.value;
+
+          if (activeTargetId.value === 'escape') {
+            escapeLocation.value.bets.push({
+              teamId: currentTeam.value.id,
+              points: betPoints.value
+            });
+          } else {
+            const loc = locations.value.find(l => l.id === activeTargetId.value);
+            if (loc) {
+              loc.bets.push({
+                teamId: currentTeam.value.id,
+                points: betPoints.value
+              });
+            }
+          }
+
+          modalState.value.betting = false;
+          sound.playTokenDrop();
+          triggerToast(`🎯 ${currentTeam.value.name} 已將信心點數押在【${activeTargetName.value}】！`);
+          advanceTurn();
+        };
+
+        const advanceTurn = () => {
+          gameState.value.turnCount++;
+          if (gameState.value.turnCount % teams.value.length === 0) {
+            if (gameState.value.currentRound < 6) {
+              gameState.value.currentRound++;
+              triggerToast(`🔔 進入第 ${gameState.value.currentRound} 回合！請下一位探險家就位！`);
+            } else {
+              triggerToast(`🏁 6 回合已全數結束！請點擊右上角「結算真相」進行驗證！`);
+            }
+          }
+          currentTeamIndex.value = (currentTeamIndex.value + 1) % teams.value.length;
+        };
+
+        const startSettlement = () => {
+          gameState.value.isSettlement = true;
+          settlementStep.value = 0;
+          scoresRevealed.value = false;
+          triggerToast("⚖️ 進入全班真相結算階段！準備逐一檢驗文史筆記！");
+        };
+
+        const advanceSettlement = () => {
+          if (settlementStep.value < 8) {
+            const currentClue = clues.value[settlementStep.value];
+            currentClue.revealed = true;
+            sound.playClick();
+
+            let newlyEliminatedCount = 0;
+            locations.value.forEach(loc => {
+              if (!loc.eliminated && currentClue.filter(loc)) {
+                loc.eliminated = true;
+                newlyEliminatedCount++;
+              }
+            });
+
+            if (newlyEliminatedCount > 0) {
+              setTimeout(() => sound.playEliminateThud(), 200);
+            }
+
+            settlementStep.value++;
+            triggerToast(`📜 已翻開第 ${settlementStep.value} 則筆記，排除了 ${newlyEliminatedCount} 個不符地點！`);
+          }
+        };
+
+        const finalizeScores = () => {
+          scoresRevealed.value = true;
+          sound.playVictoryFanfare();
+
+          teams.value.forEach(t => t.score = 0);
+
+          let winningBets = [];
+          if (secretTreasure.value) {
+            winningBets = secretTreasure.value.bets;
+          } else {
+            winningBets = escapeLocation.value.bets;
+          }
+
+          winningBets.forEach(bet => {
+            const team = teams.value.find(t => t.id === bet.teamId);
+            if (team) {
+              team.score += bet.points;
+            }
+          });
+
+          setTimeout(() => {
+            showVictoryModal.value = true;
+          }, 1000);
+        };
+
+        const sortedTeams = computed(() => {
+          return [...teams.value].sort((a, b) => b.score - a.score);
+        });
+
+        const isWinnerLocation = (loc) => {
+          return gameState.value.isSettlement && settlementStep.value === 8 && secretTreasure.value && secretTreasure.value.id === loc.id;
+        };
+
+        const isWinnerEscape = computed(() => {
+          return gameState.value.isSettlement && settlementStep.value === 8 && !secretTreasure.value;
+        });
+
+        const getTeamColor = (teamId) => teams.value.find(t => t.id === teamId)?.color || '#94a3b8';
+        const getTeamName = (teamId) => teams.value.find(t => t.id === teamId)?.name || teamId;
+
+        const getTeamInvestedCluesCount = (teamId) => {
+          return clues.value.filter(c => c.investors.some(i => i.teamId === teamId)).length;
+        };
+
+        const getTeamBetsCount = (teamId) => {
+          let count = locations.value.reduce((acc, loc) => acc + loc.bets.filter(b => b.teamId === teamId).length, 0);
+          count += escapeLocation.value.bets.filter(b => b.teamId === teamId).length;
+          return count;
+        };
+
+        const getTeamTotalBetPoints = (teamId) => {
+          let total = locations.value.reduce((acc, loc) => {
+            return acc + loc.bets.filter(b => b.teamId === teamId).reduce((s, b) => s + b.points, 0);
+          }, 0);
+          total += escapeLocation.value.bets.filter(b => b.teamId === teamId).reduce((s, b) => s + b.points, 0);
+          return total;
+        };
+
+        const openResetConfirm = () => {
+          confirmDialog.value = {
+            show: true,
+            title: '重置遊戲局勢',
+            message: '確定要重新開局嗎？所有探險隊點數與下注將全數重設。',
+            action: () => initNewGame()
+          };
+        };
+
+        const executeConfirmAction = () => {
+          if (confirmDialog.value.action) {
+            confirmDialog.value.action();
+          }
+          confirmDialog.value.show = false;
+        };
+
+        const toggleSound = () => {
+          soundEnabled.value = !soundEnabled.value;
+          sound.enabled = soundEnabled.value;
+        };
+
+        // 一鍵下載單一 index.html 檔 (供 EZPAGE 部署)
+        const downloadCurrentFile = () => {
+          try {
+            sound.playClick();
+            const htmlContent = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+            const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "index.html";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            triggerToast("✅ 已成功下載 index.html！可直接上傳 EZPAGE");
+          } catch (err) {
+            console.error("下載失敗:", err);
+            triggerToast("下載失敗，請直接從右方編輯器複製代碼存為 index.html");
+          }
+        };
+
+        // 開局初始化
+        initNewGame();
+
+        return {
+          soundEnabled,
+          toggleSound,
+          showRulesModal,
+          showTeacherModal,
+          showVictoryModal,
+          showCheatTokens,
+          scoresRevealed,
+          toastMessage,
+          confirmDialog,
+          teams,
+          currentTeam,
+          currentTeamIndex,
+          gameState,
+          settlementStep,
+          locations,
+          escapeLocation,
+          clues,
+          secretTreasure,
+          modalState,
+          activeClue,
+          clueBidPoints,
+          minBidRequired,
+          countdown,
+          activeTargetName,
+          betPoints,
+          handleClueClick,
+          confirmClueInvest,
+          closePeepWindow,
+          handleLocationClick,
+          handleEscapeZoneClick,
+          confirmPlaceBet,
+          startSettlement,
+          advanceSettlement,
+          finalizeScores,
+          sortedTeams,
+          isWinnerLocation,
+          isWinnerEscape,
+          getTeamColor,
+          getTeamName,
+          getTeamInvestedCluesCount,
+          getTeamBetsCount,
+          getTeamTotalBetPoints,
+          openResetConfirm,
+          executeConfirmAction,
+          initNewGame,
+          downloadCurrentFile
+        };
+      }
+    });
+
+    app.component('clue-card', {
+      template: '#clue-card-template',
+      props: ['clue', 'currentTeam', 'isSettling', 'getTeamColor', 'getTeamName'],
+      emits: ['investigate']
+    });
+
+    app.mount('#app');
+  </script>
+</body>
+</html>
